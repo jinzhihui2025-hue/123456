@@ -32,6 +32,12 @@ window.addEventListener("hashchange", render);
 window.addEventListener("pointerdown", initAudioOnGesture, { once: true });
 window.addEventListener("touchstart", initAudioOnGesture, { once: true, passive: true });
 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
+
 function currentPath() {
   const hash = window.location.hash.replace(/^#/, "");
   return hash || "/home";

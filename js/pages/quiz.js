@@ -69,6 +69,7 @@ export function renderQuiz({ navigate }) {
 
     if (correct) {
       playSfx("success");
+      answerWord(question.word.id, true);
     } else {
       playSfx("error");
       answerWord(question.word.id, false);

@@ -1,0 +1,17 @@
+node_modules/
+www/
+ios/
+dist/
+.capgo-credentials.json
+.capgo-credentials/
+signing/*
+!signing/.gitkeep
+*.p12
+*.mobileprovision
+*.p8
+*.ipa
+*.xcarchive
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+DerivedData/
+tools/__pycache__/

@@ -49,7 +49,7 @@ export function renderHome({ navigate }) {
 
       <section class="card panel streak-card">
         <div>
-          <span class="fire">火</span>
+          <span class="fire">🔥</span>
           <strong>${streak} 天</strong>
           <p>连续打卡</p>
         </div>
