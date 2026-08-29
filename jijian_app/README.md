@@ -1,5 +1,7 @@
 # jijian
 
+Android APK is built by the repository workflow.
+
 A new Flutter project.
 
 ## Getting Started
