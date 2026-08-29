@@ -2,6 +2,7 @@
 
 Android APK is built by the repository workflow.
 Build environment uses Java 21.
+Android Gradle plugins use the stable 8.7/8.9 toolchain.
 
 A new Flutter project.
 
