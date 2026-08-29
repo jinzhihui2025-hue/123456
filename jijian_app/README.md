@@ -1,6 +1,7 @@
 # jijian
 
 Android APK is built by the repository workflow.
+Build environment uses Java 21.
 
 A new Flutter project.
 
