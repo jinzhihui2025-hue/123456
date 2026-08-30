@@ -1,6 +1,7 @@
 node_modules/
 www/
-ios/
+# Capacitor 生成的 ios 目录（根级）
+/ios/
 dist/
 .capgo-credentials.json
 .capgo-credentials/
