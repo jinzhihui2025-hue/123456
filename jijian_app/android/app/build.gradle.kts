@@ -29,18 +29,11 @@ android {
         versionName = flutter.versionName
     }
 
-    signingConfigs {
-        create("release") {
-            keyAlias = "upload"
-            keyPassword = "miaoxin123"
-            storeFile = file("upload-keystore.jks")
-            storePassword = "miaoxin123"
-        }
-    }
-
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            // CI does not receive the private upload keystore. The debug key
+            // produces an installable release APK for direct distribution.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
