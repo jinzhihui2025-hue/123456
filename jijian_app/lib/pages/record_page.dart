@@ -20,6 +20,8 @@ class _LineEdit {
   String priceText = '';
   String hourlyText = '';
   String hoursText = '';
+  String dayRateText = '';
+  String daysText = '';
   String qtyText = '';
   _LineEdit();
   _LineEdit.fromLine(WorkOrderLine l) {
@@ -29,9 +31,12 @@ class _LineEdit {
       durationText = l.unitSeconds?.round().toString() ?? '';
     } else if (mode == PayMode.perPiece) {
       priceText = l.unitPrice?.toString() ?? '';
-    } else {
+    } else if (mode == PayMode.perHour) {
       hourlyText = l.hourlyRate?.toString() ?? '';
       hoursText = l.hours?.toString() ?? '';
+    } else {
+      dayRateText = l.dayRate?.toString() ?? '';
+      daysText = l.days?.toString() ?? '';
     }
     qtyText = l.quantity.toString();
   }
@@ -40,13 +45,13 @@ class _LineEdit {
 class _RecordPageState extends State<RecordPage> {
   late DateTime _date;
   late TextEditingController _machineCtrl;
+  late TextEditingController _subsidyCtrl;
   List<String> _machines = [];
   List<ShiftRule> _shifts = [];
   ShiftRule? _shift;
   AppSettings _settings = AppSettings();
   double _subsidy = 0;
   final List<_LineEdit> _lines = [];
-  static final Map<int, double> _lastSubsidy = {};
 
   bool get _isEdit => widget.editOrder != null;
 
@@ -55,12 +60,14 @@ class _RecordPageState extends State<RecordPage> {
     super.initState();
     _date = _isEdit ? DateTime.parse(widget.editOrder!.date) : DateTime.now();
     _machineCtrl = TextEditingController(text: widget.editOrder?.machine ?? '');
+    _subsidyCtrl = TextEditingController();
     _load();
   }
 
   @override
   void dispose() {
     _machineCtrl.dispose();
+    _subsidyCtrl.dispose();
     super.dispose();
   }
 
@@ -79,14 +86,14 @@ class _RecordPageState extends State<RecordPage> {
           if (s.id == widget.editOrder!.shiftRuleId) _shift = s;
         }
         _subsidy = widget.editOrder!.subsidy;
+        _subsidyCtrl.text = _subsidy > 0 ? _subsidy.toString() : '';
         _lines
           ..clear()
           ..addAll((widget.editLines ?? []).map((l) => _LineEdit.fromLine(l)));
       } else {
         _shift = _shifts.isNotEmpty ? _shifts.first : null;
-        if (_shift != null) {
-          _subsidy = _lastSubsidy[_shift!.id] ?? _shift!.defaultSubsidy;
-        }
+        _subsidy = 0;
+        _subsidyCtrl.text = '';
         if (_lines.isEmpty) _lines.add(_LineEdit());
       }
     });
@@ -113,7 +120,7 @@ class _RecordPageState extends State<RecordPage> {
           unitPrice: price,
           quantity: qty,
           lineTotal: price * qty);
-    } else {
+    } else if (e.mode == PayMode.perHour) {
       final rate = double.tryParse(e.hourlyText) ?? 0;
       final hours = double.tryParse(e.hoursText) ?? 0;
       if (rate <= 0 || hours <= 0) return null;
@@ -124,6 +131,17 @@ class _RecordPageState extends State<RecordPage> {
           hours: hours,
           quantity: 0,
           lineTotal: rate * hours);
+    } else {
+      final dayRate = double.tryParse(e.dayRateText) ?? 0;
+      final days = double.tryParse(e.daysText) ?? 0;
+      if (dayRate <= 0 || days <= 0) return null;
+      return WorkOrderLine(
+          model: e.model.trim(),
+          mode: payModeName(e.mode),
+          dayRate: dayRate,
+          days: days,
+          quantity: 0,
+          lineTotal: dayRate * days);
     }
   }
 
@@ -134,7 +152,7 @@ class _RecordPageState extends State<RecordPage> {
       final l = _toLine(e);
       if (l != null) lines.add(l);
     }
-    return calcOrderTotal(lines, _shift!.multiplier, _subsidy, _settings.ratePerSecond);
+    return calcOrderTotal(lines, _subsidy, _settings.ratePerSecond);
   }
 
   void _snack(String msg) {
@@ -171,7 +189,7 @@ class _RecordPageState extends State<RecordPage> {
       _snack('请至少填写一行有效明细（件型、耗时/单价、件数）');
       return;
     }
-    final p = calcOrderTotal(lines, _shift!.multiplier, _subsidy, _settings.ratePerSecond);
+    final p = calcOrderTotal(lines, _subsidy, _settings.ratePerSecond);
     final order = WorkOrder(
       id: widget.editOrder?.id,
       date: DateFormat('yyyy-MM-dd').format(_date),
@@ -187,7 +205,6 @@ class _RecordPageState extends State<RecordPage> {
     } else {
       await AppDb.insertOrder(order, lines);
     }
-    _lastSubsidy[_shift!.id!] = _subsidy;
     if (mounted) Navigator.pop(context, true);
   }
 
@@ -208,30 +225,32 @@ class _RecordPageState extends State<RecordPage> {
     );
   }
 
-  Future<void> _pickShift() async {
-    if (_shifts.isEmpty) return;
-    showCupertinoModalPopup(
-      context: context,
-      builder: (ctx) => Container(
-        height: 240,
-        color: CupertinoColors.white,
-        child: CupertinoPicker(
-          itemExtent: 44,
-          onSelectedItemChanged: (i) {
-            final s = _shifts[i];
-            setState(() {
-              _shift = s;
-              _subsidy = _lastSubsidy[s.id] ?? s.defaultSubsidy;
-            });
-          },
-          children: _shifts
-              .map((s) => Center(
-                    child: Text('${s.name}  ×${s.multiplier}   默认补助${s.defaultSubsidy.toStringAsFixed(0)}元',
-                        style: const TextStyle(fontSize: 16)),
-                  ))
-              .toList(),
-        ),
-      ),
+  void _selectShift(ShiftRule s) {
+    setState(() {
+      _shift = s;
+      // 补助不自动带出，让工人自己填（每个人不一样）
+    });
+  }
+
+  void _selectSubsidy(double v) {
+    setState(() {
+      _subsidy = v;
+      _subsidyCtrl.text = v > 0 ? v.toString() : '';
+    });
+  }
+
+  Widget _chip(String label, bool selected, VoidCallback onTap) {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      borderRadius: BorderRadius.circular(9),
+      color: selected ? kIosBlue : const Color(0xFFEAF2FF),
+      pressedOpacity: 0.7,
+      onPressed: onTap,
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected ? CupertinoColors.white : kIosBlue)),
     );
   }
 
@@ -334,13 +353,31 @@ class _RecordPageState extends State<RecordPage> {
             ),
           ),
           const IosDivider(),
-          _rowButton(
-            icon: CupertinoIcons.moon,
-            label: '班次',
-            value: _shift == null
-                ? '请选择'
-                : '${_shift!.name}  ×${_shift!.multiplier}',
-            onTap: _pickShift,
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('班次（点击直接切换）',
+                    style: TextStyle(fontSize: 13, color: kIosSecondary)),
+                const SizedBox(height: 8),
+                if (_shifts.isEmpty)
+                  const Text('请先在设置里添加班次',
+                      style: TextStyle(fontSize: 13, color: kIosRed))
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _shifts
+                        .map((s) => _chip(
+                              s.name,
+                              _shift?.id == s.id,
+                              () => _selectShift(s),
+                            ))
+                        .toList(),
+                  ),
+              ],
+            ),
           ),
           const IosDivider(),
           Padding(
@@ -348,13 +385,22 @@ class _RecordPageState extends State<RecordPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('补助（元/班）',
+                const Text('补助比例（%）· 自己填，每个工人不一样',
                     style: TextStyle(fontSize: 13, color: kIosSecondary)),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _chip('无补助', _subsidy == 0, () => _selectSubsidy(0)),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 CupertinoTextField(
                   key: const ValueKey('subsidy'),
+                  controller: _subsidyCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  placeholder: '每天可不同，自动记住上次',
+                  placeholder: '如 20 = 每件工资加20%，不填为0',
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   onChanged: (v) => setState(() => _subsidy = double.tryParse(v) ?? 0),
                 ),
@@ -425,6 +471,7 @@ class _RecordPageState extends State<RecordPage> {
               PayMode.perSecond: const Text('按秒'),
               PayMode.perPiece: const Text('按件'),
               PayMode.perHour: const Text('按小时'),
+              PayMode.perDay: const Text('按天'),
             },
             onValueChanged: (m) => setState(() => e.mode = m ?? PayMode.perSecond),
           ),
@@ -436,7 +483,7 @@ class _RecordPageState extends State<RecordPage> {
                   child: CupertinoTextField(
                     key: ValueKey('dur_$index'),
                     keyboardType: TextInputType.number,
-                    placeholder: '耗时：秒 或 分:秒',
+                    placeholder: '单件耗时 秒（如1080）或 分:秒',
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                     onChanged: (v) => setState(() => e.durationText = v),
                   ),
@@ -447,19 +494,28 @@ class _RecordPageState extends State<RecordPage> {
                   child: CupertinoTextField(
                     key: ValueKey('qty_$index'),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    placeholder: '件数',
+                    placeholder: '总件数',
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                     onChanged: (v) => setState(() => e.qtyText = v),
                   ),
                 ),
               ],
             ),
-            if (durSec != null)
+            if (durSec != null) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text('= ${formatSeconds(durSec)}（${durSec}秒）',
+                child: Text(
+                    '单件 ${formatSeconds(durSec)}（${durSec}秒）· 单件工价 ¥${(_settings.ratePerSecond * durSec).toStringAsFixed(2)}',
                     style: const TextStyle(fontSize: 12, color: kIosBlue)),
               ),
+              if (double.tryParse(e.qtyText) != null && (double.tryParse(e.qtyText) ?? 0) > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    '共 ${e.qtyText} 件 = ${((double.tryParse(e.qtyText) ?? 0) * durSec).round()} 秒',
+                    style: const TextStyle(fontSize: 12, color: kIosSecondary)),
+                ),
+            ],
           ] else if (e.mode == PayMode.perPiece) ...[
             Row(
               children: [
@@ -485,7 +541,7 @@ class _RecordPageState extends State<RecordPage> {
                 ),
               ],
             ),
-          ] else ...[
+          ] else if (e.mode == PayMode.perHour) ...[
             Row(
               children: [
                 Expanded(
@@ -509,11 +565,38 @@ class _RecordPageState extends State<RecordPage> {
                 ),
               ],
             ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: CupertinoTextField(
+                    key: ValueKey('dayrate_$index'),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    placeholder: '日薪（元/天）',
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    onChanged: (v) => setState(() => e.dayRateText = v),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: CupertinoTextField(
+                    key: ValueKey('days_$index'),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    placeholder: '天数',
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    onChanged: (v) => setState(() => e.daysText = v),
+                  ),
+                ),
+              ],
+            ),
           ],
           const SizedBox(height: 8),
-          Text('本行小计  ￥${lineTotal.toStringAsFixed(2)}',
+          Text(
+              '本行小计（含补助${_subsidy.toStringAsFixed(0)}%） ￥${(lineTotal * (1 + _subsidy / 100)).toStringAsFixed(2)}',
               style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: kIosLabel)),
+                  fontSize: 14, fontWeight: FontWeight.w600, color: kIosLabel)),
+          Text('基础 ￥${lineTotal.toStringAsFixed(2)} + 补助${_subsidy.toStringAsFixed(0)}%',
+              style: const TextStyle(fontSize: 12, color: kIosSecondary)),
         ],
       ),
     );
@@ -534,8 +617,10 @@ class _RecordPageState extends State<RecordPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('基础 ￥${p.base.toStringAsFixed(2)} ×${_shift?.multiplier ?? 1} + 补助 ￥${_subsidy.toStringAsFixed(2)}',
+                  Text('基础 ￥${p.base.toStringAsFixed(2)} × (1+补助${_subsidy.toStringAsFixed(0)}%) = ￥${p.total.toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 12, color: kIosSecondary)),
+                  Text('补助${_subsidy.toStringAsFixed(0)}%已计入本单金额',
+                      style: const TextStyle(fontSize: 11, color: kIosGreen)),
                   Text('本单金额 ￥${p.total.toStringAsFixed(2)}',
                       style: const TextStyle(
                           fontSize: 22, fontWeight: FontWeight.w600, color: kIosLabel)),

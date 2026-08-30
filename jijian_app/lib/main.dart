@@ -14,7 +14,7 @@ class MiaoxinApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoApp(
-      title: '秒薪计件',
+      title: '计件助手',
       debugShowCheckedModeBanner: false,
       theme: const CupertinoThemeData(
         brightness: Brightness.light,
@@ -70,7 +70,7 @@ class _MainShellState extends State<MainShell> {
           BottomNavigationBarItem(icon: Icon(CupertinoIcons.house_fill), label: '首页'),
           BottomNavigationBarItem(icon: Icon(CupertinoIcons.chart_bar_fill), label: '统计'),
           BottomNavigationBarItem(icon: Icon(CupertinoIcons.calendar_today), label: '历史'),
-          BottomNavigationBarItem(icon: Icon(CupertinoIcons.gearshape_fill), label: '设置'),
+          BottomNavigationBarItem(icon: Icon(CupertinoIcons.gear_solid), label: '设置'),
         ],
       ),
       tabBuilder: (context, index) => CupertinoTabView(builder: (_) => pages[index]),

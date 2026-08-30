@@ -168,15 +168,20 @@ class _HomePageState extends State<HomePage> {
   Widget _orderTile(_HomeData d, WorkOrder o, Map<int?, String> shiftName) {
     final ls = d.lines[o.id] ?? [];
     final linesDesc = ls.map((l) {
-      if (payModeFromName(l.mode) == PayMode.perSecond) {
+      final m = payModeFromName(l.mode);
+      if (m == PayMode.perSecond) {
         return '${l.model} ${l.quantity.toStringAsFixed(0)}件 (${formatSeconds(l.unitSeconds!.round())})';
+      } else if (m == PayMode.perHour) {
+        return '${l.model} ${l.hours?.toString() ?? ''}小时';
+      } else if (m == PayMode.perDay) {
+        return '${l.model} ${l.days?.toString() ?? ''}天';
       }
       return '${l.model} ${l.quantity.toStringAsFixed(0)}件';
     }).join('，');
     return CupertinoListTile(
-      title: Text('${o.machine} · ${shiftName[o.shiftRuleId] ?? "班次"} ×${_fmtMul(d, o)}',
+      title: Text('${o.machine} · ${shiftName[o.shiftRuleId] ?? "班次"}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-      subtitle: Text('补助 ￥${o.subsidy.toStringAsFixed(2)} · 基础 ￥${o.baseTotal.toStringAsFixed(2)}\n$linesDesc',
+      subtitle: Text('补助${o.subsidy.toStringAsFixed(0)}% · 基础 ￥${o.baseTotal.toStringAsFixed(2)}\n$linesDesc',
           style: const TextStyle(fontSize: 12, color: kIosSecondary)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -191,10 +196,4 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  String _fmtMul(_HomeData d, WorkOrder o) {
-    for (final s in d.shifts) {
-      if (s.id == o.shiftRuleId) return s.multiplier.toString();
-    }
-    return '1';
-  }
 }

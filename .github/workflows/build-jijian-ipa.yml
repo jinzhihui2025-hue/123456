@@ -1,0 +1,41 @@
+name: Build Jijian IPA (计件助手)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: jijian_app
+        run: flutter pub get
+
+      - name: Build iOS (no codesign)
+        working-directory: jijian_app
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          cd jijian_app/build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r jijian-unsigned.ipa Payload/
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: jijian-unsigned-ipa
+          path: jijian_app/build/ios/iphoneos/jijian-unsigned.ipa
+          retention-days: 30

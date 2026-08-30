@@ -1,4 +1,6 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../data/db.dart';
 import '../data/export.dart';
 import '../models/models.dart';
@@ -68,6 +70,41 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Future<void> _contact(String name, String id, String url) async {
+    await Clipboard.setData(ClipboardData(text: id));
+    showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text('$name：$id'),
+        content: const Text('账号已复制，可粘贴到对应App添加好友；或点下方按钮直接打开。'),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('复制账号'),
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: id));
+              Navigator.pop(ctx);
+              _snack('已复制 $id');
+            },
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            child: Text('打开$name'),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await launchUrl(Uri.parse(url),
+                  mode: LaunchMode.externalApplication);
+              if (!ok) _snack('未安装$name或无法打开');
+            },
+          ),
+          CupertinoDialogAction(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
@@ -118,10 +155,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 6),
                     children: [
                       ..._shifts.map((s) => CupertinoListTile(
-                            title: Text('${s.name}  ×${s.multiplier}',
+                            title: Text('${s.name}',
                                 style: const TextStyle(fontSize: 16)),
-                            subtitle: Text('默认补助 ${s.defaultSubsidy.toStringAsFixed(0)} 元/班（记单时可改）',
-                                style: const TextStyle(fontSize: 12, color: kIosSecondary)),
+                            subtitle: const Text('点击编辑 · 补助由工人记单时自己填',
+                                style: TextStyle(fontSize: 12, color: kIosSecondary)),
                             trailing: const Icon(CupertinoIcons.chevron_right,
                                 size: 16, color: kIosSecondary),
                             onTap: () => _editShift(s),
@@ -189,9 +226,33 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ],
                   ),
+                  const IosSectionHeader('联系客服'),
+                  CupertinoListSection.insetGrouped(
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                    children: [
+                      CupertinoListTile(
+                        leading: const Icon(CupertinoIcons.chat_bubble, color: kIosGreen),
+                        title: const Text('微信', style: TextStyle(fontSize: 16)),
+                        subtitle: const Text('TFYin666',
+                            style: TextStyle(fontSize: 12, color: kIosSecondary)),
+                        trailing: const Icon(CupertinoIcons.chevron_right,
+                            size: 16, color: kIosSecondary),
+                        onTap: () => _contact('微信', 'TFYin666', 'weixin://'),
+                      ),
+                      CupertinoListTile(
+                        leading: const Icon(CupertinoIcons.chat_bubble_2, color: kIosBlue),
+                        title: const Text('QQ', style: TextStyle(fontSize: 16)),
+                        subtitle: const Text('582522101',
+                            style: TextStyle(fontSize: 12, color: kIosSecondary)),
+                        trailing: const Icon(CupertinoIcons.chevron_right,
+                            size: 16, color: kIosSecondary),
+                        onTap: () => _contact('QQ', '582522101', 'mqq://'),
+                      ),
+                    ],
+                  ),
                   const Padding(
                     padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
-                    child: Text('秒薪计件 v1.0.0 · 免费本地版\n数据保存在手机本地，无账号无云端。',
+                    child: Text('计件助手 v1.0.0 · 免费本地版\n数据保存在手机本地，无账号无云端。',
                         style: TextStyle(fontSize: 12, color: kIosSecondary)),
                   ),
                 ],
@@ -202,8 +263,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _editShift(ShiftRule? rule) async {
     final nameCtrl = TextEditingController(text: rule?.name ?? '');
-    final mulCtrl = TextEditingController(text: (rule?.multiplier ?? 1.0).toString());
-    final subCtrl = TextEditingController(text: (rule?.defaultSubsidy ?? 0).toStringAsFixed(0));
     showCupertinoDialog(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
@@ -212,16 +271,6 @@ class _SettingsPageState extends State<SettingsPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             CupertinoTextField(controller: nameCtrl, placeholder: '班次名（如 夜班）'),
-            const SizedBox(height: 8),
-            CupertinoTextField(
-                controller: mulCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                placeholder: '倍率（如 1.2）'),
-            const SizedBox(height: 8),
-            CupertinoTextField(
-                controller: subCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                placeholder: '默认补助（元/班）'),
           ],
         ),
         actions: [
@@ -234,16 +283,12 @@ class _SettingsPageState extends State<SettingsPage> {
             child: const Text('保存'),
             onPressed: () async {
               Navigator.pop(ctx);
-              final mul = double.tryParse(mulCtrl.text) ?? 1.0;
-              final sub = double.tryParse(subCtrl.text) ?? 0;
               final name = nameCtrl.text.trim();
               if (name.isEmpty) return;
               if (rule == null) {
-                await AppDb.insertShiftRule(
-                    ShiftRule(name: name, multiplier: mul, defaultSubsidy: sub));
+                await AppDb.insertShiftRule(ShiftRule(name: name));
               } else {
-                await AppDb.updateShiftRule(ShiftRule(
-                    id: rule.id, name: name, multiplier: mul, defaultSubsidy: sub));
+                await AppDb.updateShiftRule(ShiftRule(id: rule.id, name: name));
               }
               _load();
             },
@@ -263,7 +308,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ? (item.unitSeconds?.round().toString() ?? '')
                 : mode == PayMode.perPiece
                     ? (item.unitPrice?.toString() ?? '')
-                    : (item.hourlyRate?.toString() ?? ''));
+                    : mode == PayMode.perHour
+                        ? (item.hourlyRate?.toString() ?? '')
+                        : (item.dayRate?.toString() ?? ''));
     showCupertinoDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) => CupertinoAlertDialog(
@@ -279,6 +326,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 PayMode.perSecond: const Text('按秒'),
                 PayMode.perPiece: const Text('按件'),
                 PayMode.perHour: const Text('按小时'),
+                PayMode.perDay: const Text('按天'),
               },
               onValueChanged: (m) => setDlg(() => mode = m ?? PayMode.perSecond),
             ),
@@ -290,7 +338,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   ? '单件耗时（秒）'
                   : mode == PayMode.perPiece
                       ? '单价（元/件）'
-                      : '时薪（元/小时）',
+                      : mode == PayMode.perHour
+                          ? '时薪（元/小时）'
+                          : '日薪（元/天）',
             ),
           ],
         ),
@@ -314,6 +364,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 unitSeconds: mode == PayMode.perSecond ? pv : null,
                 unitPrice: mode == PayMode.perPiece ? pv : null,
                 hourlyRate: mode == PayMode.perHour ? pv : null,
+                dayRate: mode == PayMode.perDay ? pv : null,
               );
               if (item == null) {
                 await AppDb.insertModelLib(m);

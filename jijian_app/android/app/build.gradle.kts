@@ -31,8 +31,6 @@ android {
 
     buildTypes {
         release {
-            // CI does not receive the private upload keystore. The debug key
-            // produces an installable release APK for direct distribution.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
